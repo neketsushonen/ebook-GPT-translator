@@ -4,6 +4,9 @@ import pdfminer.high_level
 import re
 import openai
 from tqdm import tqdm
+import ollama
+from typing import Dict, Optional
+
 # import nltk
 # nltk.download('punkt')
 # from nltk.tokenize import sent_tokenize
@@ -30,6 +33,181 @@ from docx import Document
 import mobi
 import pandas as pd
 
+
+def complet_text_ollama(
+    text: str,
+    target_lang: str,
+    model: str = "llama3.1:latest"
+) -> Dict:
+   
+    # Construct the prompt
+    # prompt = f"""
+    # 作为一名中文写作改进助理，你的任务是改进所提供文本的拼写、语法、清晰、简洁和整体可读性，同时分解长句，减少重复，并提供改进建议。请只提供文本的更正版本，避免包括解释。
+    # 僅傳回有效 JSON 格式的調整文字，就像這個範例一樣：
+    # {{"translation": "translated text here"}}
+    # 请从编辑以下文本开始: {text}
+    # """
+    prompt = f"""
+        作为资深{target_lang}写作优化专家，你需要：
+
+        1. 提升文本质量：
+        - 纠正所有错别字和标点符号
+        - 优化语法结构和句式
+        - 确保用词准确和地道
+        - 提高表达的连贯性和流畅度
+        - 只提供文本的更正版本，避免包括解释。
+
+        2. 改善可读性：
+        - 将冗长句子分解成简短、清晰的表达
+        - 消除重复和冗余内容
+        - 优化段落结构和层次
+        - 增强文本的逻辑性
+        - 只提供文本的更正版本，避免包括解释。
+
+        3. 保持风格：
+        - 维持原文的语气和风格
+        - 保留专业术语和关键概念
+        - 确保修改后的内容符合原意
+        - 只提供文本的更正版本，避免包括解释。
+
+        请按以下JSON格式返回优化结果，并遵循这些规则：
+        1. 使用双引号作为JSON的键和值的分隔符
+        2. 文本内容中的所有双引号需要用反斜杠转义 (\")
+        3. 文本内容中的所有反斜杠需要双重转义 (\\)
+        4. 不要在文本中使用换行符，使用\\n代替
+
+        {{"improved_text": "优化后的文本内容"}}
+
+        开始优化文本：{text}
+    """
+    try:
+        # Generate translation using Ollama
+        response = ollama.generate(
+            model=model,
+            prompt=prompt,
+            system="你是專業作家。只回應 JSON 格式。"
+        )
+        
+        # Extract the response text
+        translation_text = response['response'].strip()
+        
+        # Parse the JSON response
+        try:
+            translation_json = json.loads(translation_text)
+            
+            # New validation logic
+            translation_result = translation_json.get("improved_text", translation_text)
+            
+            # Check if translation_result is itself a JSON string
+            if isinstance(translation_result, str):
+                try:
+                    nested_json = json.loads(translation_result)
+                    if isinstance(nested_json, dict) and "improved_text" in nested_json:
+                        translation_result = nested_json["improved_text"]
+                except json.JSONDecodeError:
+                    # If it's not valid JSON, keep the string as is
+                    pass
+            
+            return {
+                "success": True,
+                "source_text": text,
+                "translation": translation_result
+            }
+        except json.JSONDecodeError:
+            # If JSON parsing fails, wrap the raw translation in JSON format
+            return {
+                "success": True,
+                "source_text": text,
+                "translation": translation_text
+            }
+            
+    except Exception as e:
+        print("sssss" )
+        return {
+            "success": False,
+            "error": str(e),
+            "source_text": text,
+        }   
+
+
+def translate_text_ollama(
+    text: str,
+    target_language: str,
+    source_language: Optional[str] = None,
+    model: str = "llama3.1:latest"
+) -> Dict:
+   
+    # Construct the prompt
+    if source_language:
+        prompt = f"""
+        将以下{source_language}段落翻译成{target_language}.
+        僅傳回有效 JSON 格式的翻譯文字，就像這個範例一樣：
+        {{"translation": "translated text here"}}
+        
+        要翻譯的文字: {text}
+        """
+    else:
+        prompt = f"""
+        Translate the following text to {target_language}.
+        Return only the translated text in valid JSON format like this example:
+        {{"translation": "translated text here"}}
+        
+        Text to translate: {text}
+        """
+    
+    try:
+        # Generate translation using Ollama
+        response = ollama.generate(
+            model=model,
+            prompt=prompt,
+            system="你是專業翻譯員。只回應 JSON 格式的翻譯。"
+        )
+        
+        # Extract the response text
+        translation_text = response['response'].strip()
+        
+        # Parse the JSON response
+        try:
+            translation_json = json.loads(translation_text)
+            
+            # New validation logic
+            translation_result = translation_json.get("translation", translation_text)
+            
+            # Check if translation_result is itself a JSON string
+            if isinstance(translation_result, str):
+                try:
+                    nested_json = json.loads(translation_result)
+                    if isinstance(nested_json, dict) and "translation" in nested_json:
+                        translation_result = nested_json["translation"]
+                except json.JSONDecodeError:
+                    # If it's not valid JSON, keep the string as is
+                    pass
+            
+            return {
+                "success": True,
+                "source_text": text,
+                "target_language": target_language,
+                "source_language": source_language,
+                "translation": translation_result
+            }
+        except json.JSONDecodeError:
+            # If JSON parsing fails, wrap the raw translation in JSON format
+            return {
+                "success": True,
+                "source_text": text,
+                "target_language": target_language,
+                "source_language": source_language,
+                "translation": translation_text
+            }
+            
+    except Exception as e:
+        return {
+            "success": False,
+            "error": str(e),
+            "source_text": text,
+            "target_language": target_language,
+            "source_language": source_language
+        }   
 
 def get_docx_title(docx_filename):
     with zipfile.ZipFile(docx_filename) as zf:
@@ -164,13 +342,7 @@ def create_chat_completion(prompt, text, model="gpt-3.5-turbo", **kwargs):
 
 import argparse
 
-# 如果配置文件有写，就设置api代理
-if len(api_proxy) == 0:
-    print("未检测到OpenAI API 代理，当前使用api地址为: " + openai.api_base)
-else:
-    api_proxy_url = api_proxy + "/v1"
-    openai.api_base = os.environ.get("OPENAI_API_BASE", api_proxy_url)
-    print("正在使用OpenAI API 代理，代理地址为: "+openai.api_base)
+
 
 # 创建参数解析器
 parser = argparse.ArgumentParser()
@@ -275,7 +447,40 @@ def convert_pdf_to_text(pdf_filename, start_page=1, end_page=-1):
 
 
 # 将文本分成不大于1024字符的短文本list
+def split_text_ollama(text):
+
+    response = ollama.generate(
+        model='llama3.1:latest',
+        prompt=f"Divide el siguiente texto en frases lógicas, no es necesario agregar la anotacion ni explicacion ni enumeración: ```{text}```",
+    )
+        
+        # Extract the response text
+    response = response['response'].strip()
+
+    
+    # La respuesta del modelo se espera como una lista de frases separadas
+    sentence_list = response.split("\n")  # Asegúrate de procesar la respuesta según el formato devuelto
+
+    # Inicializa la lista para fragmentos cortos de texto
+    short_text_list = []
+    short_text = ""
+
+    # Agrupa las frases según el límite máximo de longitud
+    for s in sentence_list:
+        if len(short_text + s) <= 200:
+            short_text += s
+        else:
+            short_text_list.append(short_text)
+            short_text = s
+
+    # Agrega el último fragmento
+    if short_text:
+        short_text_list.append(short_text)
+
+    return short_text_list
+
 def split_text(text):
+    
     sentence_list = re.findall(r'.+?[。！？!?.]', text)
 
     # 初始化短文本列表
@@ -285,7 +490,7 @@ def split_text(text):
     # 遍历句子列表
     for s in sentence_list:
         # 如果当前短文本加上新的句子长度不大于1024，则将新的句子加入当前短文本
-        if len(short_text + s) <= 1024:
+        if len(short_text + s) <= 200:
             short_text += s
         # 如果当前短文本加上新的句子长度大于1024，则将当前短文本加入短文本列表，并重置当前短文本为新的句子
         else:
@@ -310,40 +515,25 @@ cost_tokens = 0
 
 # 翻译短文本
 def translate_text(text):
-    global cost_tokens
-
-    # 调用openai的API进行翻译
-    try:
-        completion = create_chat_completion(prompt, text)
-        t_text = (
-            completion["choices"][0]
-            .get("message")
-            .get("content")
-            .encode("utf8")
-            .decode()
-        )
-        # Get the token usage from the API response
-        cost_tokens += completion["usage"]["total_tokens"]
-
-    except Exception as e:
-        import time
-        # TIME LIMIT for open api please pay
-        sleep_time = 60
-        time.sleep(sleep_time)
-        print(e, f"will sleep  {sleep_time} seconds")
-
-        completion = create_chat_completion(prompt, text)
-        t_text = (
-            completion["choices"][0]
-            .get("message")
-            .get("content")
-            .encode("utf8")
-            .decode()
-        )
-        # Get the token usage from the API response
-        cost_tokens += completion["usage"]["total_tokens"]
-
-    return t_text
+    if (text ==  ""):
+        return text
+    source_lang = "西班牙文"
+    target_lang = "中文"
+    result = translate_text_ollama(
+        text,
+        target_lang,
+        source_lang,
+        "llama3.1:latest"
+    )
+    if(result["success"] == True):
+        source = result["translation"]
+        result = complet_text_ollama( source, target_lang, "llama3.1:latest" )
+        if(result["success"] == True):
+            return result["translation"]
+        else: 
+            return source
+    else: 
+        return ""
 
 
 def translate_and_store(text):
