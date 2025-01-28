@@ -33,11 +33,18 @@ from docx import Document
 import mobi
 import pandas as pd
 
+def extraer_contenido_json(texto):
+    # Usamos una expresión regular para encontrar el contenido entre las marcas ```json ... ```
+    patron = r'```json(.*?)```'
+    contenido = re.findall(patron, texto, re.DOTALL)  # re.DOTALL permite que el '.' coincida con saltos de línea
+    
+    # Si hay coincidencias, devolvemos el contenido como un solo string (sin lista)
+    return contenido[0] if contenido else ''
 
 def complet_text_ollama(
     text: str,
     target_lang: str,
-    model: str = "llama3.1:latest"
+    model: str = "phi4:latest"
 ) -> Dict:
    
     # Construct the prompt
@@ -48,44 +55,36 @@ def complet_text_ollama(
     # 请从编辑以下文本开始: {text}
     # """
     prompt = f"""
-        作为资深{target_lang}写作优化专家，你需要：
-
-        1. 提升文本质量：
-        - 纠正所有错别字和标点符号
-        - 优化语法结构和句式
-        - 确保用词准确和地道
-        - 提高表达的连贯性和流畅度
-        - 只提供文本的更正版本，避免包括解释。
-
-        2. 改善可读性：
-        - 将冗长句子分解成简短、清晰的表达
-        - 消除重复和冗余内容
-        - 优化段落结构和层次
-        - 增强文本的逻辑性
-        - 只提供文本的更正版本，避免包括解释。
-
-        3. 保持风格：
-        - 维持原文的语气和风格
-        - 保留专业术语和关键概念
-        - 确保修改后的内容符合原意
-        - 只提供文本的更正版本，避免包括解释。
-
-        请按以下JSON格式返回优化结果，并遵循这些规则：
-        1. 使用双引号作为JSON的键和值的分隔符
-        2. 文本内容中的所有双引号需要用反斜杠转义 (\")
-        3. 文本内容中的所有反斜杠需要双重转义 (\\)
-        4. 不要在文本中使用换行符，使用\\n代替
-
-        {{"improved_text": "优化后的文本内容"}}
-
-        开始优化文本：{text}
+        開始優化文本
+        ------
+        {text}
     """
     try:
         # Generate translation using Ollama
         response = ollama.generate(
             model=model,
             prompt=prompt,
-            system="你是專業作家。只回應 JSON 格式。"
+            system="""
+        作為資深{target_lang}寫作優化專家，你需要：
+        1. 提升文本質量：
+        - 糾正所有錯別字和標點符號
+        - 優化語法結構和句式
+        - 確保用詞準確和地道
+        - 提高表達的連貫性和流暢度
+        - 只提供文本的更正版本，避免包括解釋。
+        2. 改善可讀性：
+        - 將冗長句子分解成簡短、清晰的表達
+        - 消除重覆和冗余內容
+        - 優化段落結構和層次
+        - 增強文本的邏輯性
+        - 只提供文本的更正版本，避免包括解釋。
+        3. 保持風格：
+        - 維持原文的語氣和風格
+        - 保留專業術語和關鍵概念
+        - 確保修改後的內容符合原意
+        - 只提供文本的更正版本，避免包括解釋。
+        請遵循這些規則，並按以下JSON格式返回優化結果，： {{"improved_text": "優化後的文本內容"}}
+        """
         )
         
         # Extract the response text
@@ -93,7 +92,7 @@ def complet_text_ollama(
         
         # Parse the JSON response
         try:
-            translation_json = json.loads(translation_text)
+            translation_json = json.loads(extraer_contenido_json(translation_text))
             
             # New validation logic
             translation_result = translation_json.get("improved_text", translation_text)
@@ -122,7 +121,7 @@ def complet_text_ollama(
             }
             
     except Exception as e:
-        print("sssss" )
+        print("sssss"+ str(e))
         return {
             "success": False,
             "error": str(e),
@@ -134,16 +133,15 @@ def translate_text_ollama(
     text: str,
     target_language: str,
     source_language: Optional[str] = None,
-    model: str = "llama3.1:latest"
+    model: str = "phi4:latest"
 ) -> Dict:
    
     # Construct the prompt
     if source_language:
         prompt = f"""
         将以下{source_language}段落翻译成{target_language}.
-        僅傳回有效 JSON 格式的翻譯文字，就像這個範例一樣：
+        僅傳回有效 JSON 格式的翻譯文字，但不要使用程式碼格式，就像這個範例一樣：
         {{"translation": "translated text here"}}
-        
         要翻譯的文字: {text}
         """
     else:
@@ -151,7 +149,6 @@ def translate_text_ollama(
         Translate the following text to {target_language}.
         Return only the translated text in valid JSON format like this example:
         {{"translation": "translated text here"}}
-        
         Text to translate: {text}
         """
     
@@ -160,7 +157,7 @@ def translate_text_ollama(
         response = ollama.generate(
             model=model,
             prompt=prompt,
-            system="你是專業翻譯員。只回應 JSON 格式的翻譯。"
+            system="你是專業翻譯員。不必翻譯文章內所有的人名、地名、城市名、政黨名、地區名、大學名、河流名。請只以 JSON 格式提供翻譯"
         )
         
         # Extract the response text
@@ -450,7 +447,7 @@ def convert_pdf_to_text(pdf_filename, start_page=1, end_page=-1):
 def split_text_ollama(text):
 
     response = ollama.generate(
-        model='llama3.1:latest',
+        model='phi4:latest',
         prompt=f"Divide el siguiente texto en frases lógicas, no es necesario agregar la anotacion ni explicacion ni enumeración: ```{text}```",
     )
         
@@ -517,17 +514,17 @@ cost_tokens = 0
 def translate_text(text):
     if (text ==  ""):
         return text
-    source_lang = "西班牙文"
-    target_lang = "中文"
+    source_lang = "英文"
+    target_lang = "繁體中文"
     result = translate_text_ollama(
         text,
         target_lang,
         source_lang,
-        "llama3.1:latest"
+        "phi4:latest"
     )
     if(result["success"] == True):
         source = result["translation"]
-        result = complet_text_ollama( source, target_lang, "llama3.1:latest" )
+        result = complet_text_ollama( source, target_lang, "phi4:latest" )
         if(result["success"] == True):
             return result["translation"]
         else: 
