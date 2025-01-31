@@ -33,6 +33,15 @@ from docx import Document
 import mobi
 import pandas as pd
 
+def concatenar_parrafos(texto):
+    # Dividir el texto en párrafos utilizando el salto de línea como delimitador
+    párrafos = texto.strip().split('\n')
+    
+    # Concatenar todos los párrafos en un solo string
+    texto_concatenado = ''.join(párrafos)
+    
+    return texto_concatenado
+
 def extraer_contenido_json(texto):
     # Usamos una expresión regular para encontrar el contenido entre las marcas ```json ... ```
     patron = r'```json(.*?)```'
@@ -500,6 +509,11 @@ def split_text(text):
 
 # 将句号替换为句号+回车
 def return_text(text):
+        # Verifica si text es un diccionario
+    if isinstance(text, dict):
+        # Si tiene la clave 'translation', se toma su valor
+        text = text.get('translation', '')
+    # Realiza los reemplazos como tenías definidos
     text = text.replace(". ", ".\n")
     text = text.replace("。", "。\n")
     text = text.replace("！", "！\n")
@@ -655,7 +669,7 @@ if filename.endswith('.epub'):
                 # 翻译当前短文本
                 translated_short_text = translate_and_store(short_text)
                 short_text = return_text(short_text)
-                translated_short_text = return_text(translated_short_text)
+                translated_short_text = concatenar_parrafos(return_text(translated_short_text))
                 # 将当前短文本和翻译后的文本加入总文本中
                 if bilingual_output.lower() == 'true':
                     translated_text += f"{short_text}<br>\n{translated_short_text}<br>\n"
