@@ -148,10 +148,9 @@ def translate_text_ollama(
     # Construct the prompt
     if source_language:
         prompt = f"""
-        将以下{source_language}段落翻译成{target_language}.
-        僅傳回有效 JSON 格式的翻譯文字，但不要使用程式碼格式，就像這個範例一樣：
-        {{"translation": "translated text here"}}
-        要翻譯的文字: {text}
+        請開始翻譯以下的段落: 
+        ---------
+        {text}
         """
     else:
         prompt = f"""
@@ -166,7 +165,18 @@ def translate_text_ollama(
         response = ollama.generate(
             model=model,
             prompt=prompt,
-            system="你是專業翻譯員。不必翻譯文章內所有的人名、地名、城市名、政黨名、地區名、大學名、河流名。請只以 JSON 格式提供翻譯"
+            system="""
+             你是一位精通{source_language}與{target_language}。請把我給你段落{source_language}寫成的段落翻譯為{target_language}。
+             翻譯的原則如下：
+                - 譯文必須是用溫暖而富含人文關懷的筆觸，結合流暢自然的語言風格。
+                - 翻譯時，請注重使用多樣化的句式結構，巧妙融入{target_language}日常俚語與成語俗語，使翻譯既正式又不失親切感。
+                - 在翻譯觀點或敘述事件時，鼓勵采用類比、故事講述或親身經歷的視角，以增進讀者的共鳴。
+                - 注意翻譯段落之間的邏輯過渡要自然，翻譯語言應符合目標讀者群體的習慣與期待，避免生硬的術語堆砌或機械式的重覆。
+                - 力求讓每個翻譯都像是與讀者進行的一場真誠對話。
+                - 不必翻譯文章內所有的人名、地名、城市名、政黨名、地區名、大學名、河流名，
+                - 翻譯完後，讓譯文進行語法的修飾，儘量讓譯文讀起來通順，並充滿智者的口氣，並用最適合原文的字句來表達。
+                 翻譯完後，僅傳回有效 JSON 格式的翻譯文字，但不要使用程式碼格式，就像這個範例一樣： {{"translation": "translated text here"}}
+            """
         )
         
         # Extract the response text
@@ -457,7 +467,7 @@ def split_text_ollama(text):
 
     response = ollama.generate(
         model='phi4:latest',
-        prompt=f"Divide el siguiente texto en frases lógicas, no es necesario agregar la anotacion ni explicacion ni enumeración: ```{text}```",
+        prompt=f"Divide el siguiente texto en párrafos, no es necesario agregar la anotacion ni explicacion ni enumeración: ```{text}```",
     )
         
         # Extract the response text
@@ -496,7 +506,7 @@ def split_text(text):
     # 遍历句子列表
     for s in sentence_list:
         # 如果当前短文本加上新的句子长度不大于1024，则将新的句子加入当前短文本
-        if len(short_text + s) <= 200:
+        if len(short_text + s) <= 600:
             short_text += s
         # 如果当前短文本加上新的句子长度大于1024，则将当前短文本加入短文本列表，并重置当前短文本为新的句子
         else:
@@ -529,7 +539,7 @@ def translate_text(text):
     if (text ==  ""):
         return text
     source_lang = "英文"
-    target_lang = "繁體中文"
+    target_lang = "台灣繁體中文"
     result = translate_text_ollama(
         text,
         target_lang,
