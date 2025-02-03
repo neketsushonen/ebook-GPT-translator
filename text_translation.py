@@ -168,7 +168,6 @@ def complet_text_ollama_simple(
         - 消除重覆和冗余內容
         - 優化段落結構和層次
         - 增強文本的邏輯性
-        - 維持原文的語氣和風格
         - 保留專業術語和關鍵概念
         - 確保修改後的內容符合原意
         - 只提供文本的更正版本，避免包括解釋。
@@ -608,6 +607,8 @@ def translate_and_store(text):
 
     # 否则，调用 translate_text 函数进行翻译，并将结果存储在字典中
     translated_text = translate_text(text)
+    #print("\033[37m" + translated_text + "\033[0m")
+    translated_text = complet_text_ollama_simple(concatenar_parrafos(return_text(translated_text)) )
     translated_dict[text] = translated_text
 
     # 将字典保存为 JSON 文件
@@ -721,11 +722,11 @@ if filename.endswith('.epub'):
                 #print(return_text(short_text))
                 count += 1
                 # 翻译当前短文本
+                print("\033[34m" + short_text + "\033[0m")
                 translated_short_text = translate_and_store(return_text(short_text))
                 short_text = return_text(short_text)
-                translated_short_text = complet_text_ollama_simple(concatenar_parrafos(return_text(translated_short_text)) )
                 # Imprimir short_text en azul
-                print("\033[34m" + short_text + "\033[0m")
+                
 
                 # Imprimir translated_short_text en verde
                 print("\033[32m" + translated_short_text + "\033[0m")
