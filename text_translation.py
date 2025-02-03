@@ -95,6 +95,7 @@ def complet_text_ollama(
         - 保留專業術語和關鍵概念
         - 確保修改後的內容符合原意
         - 只提供文本的更正版本，避免包括解釋。
+        - 不必翻譯文章內所有的人名、地名、城市名、政黨名、地區名、大學名、河流名，
         請遵循這些規則，並按以下JSON格式返回優化結果： {{"improved_text": "優化後的文本內容"}}
         """
         )
@@ -132,6 +133,70 @@ def complet_text_ollama(
             "source_text": text,
         }   
 
+def complet_text_ollama_simple(
+    text: str,
+    target_lang: str  = "台灣繁體中文",
+    model: str = "phi4:latest"
+) -> Dict:
+   
+    # Construct the prompt
+    # prompt = f"""
+    # 作为一名中文写作改进助理，你的任务是改进所提供文本的拼写、语法、清晰、简洁和整体可读性，同时分解长句，减少重复，并提供改进建议。请只提供文本的更正版本，避免包括解释。
+    # 僅傳回有效 JSON 格式的調整文字，就像這個範例一樣：
+    # {{"translation": "translated text here"}}
+    # 请从编辑以下文本开始: {text}
+    # """
+    prompt = f"""
+        開始優化本文
+        ```
+        {text}
+        ```
+    """
+    try:
+        # Generate translation using Ollama
+        response = ollama.generate(
+            model=model,
+            prompt=prompt,
+            system="""
+        作為資深{target_lang}寫作優化專家，你需要：
+        - 維持原來語言：{target_lang}
+        - 糾正所有錯別字和標點符號
+        - 優化語法結構和句式
+        - 確保用詞準確和地道
+        - 提高表達的連貫性和流暢度
+        - 將冗長句子分解成簡短、清晰的表達
+        - 消除重覆和冗余內容
+        - 優化段落結構和層次
+        - 增強文本的邏輯性
+        - 維持原文的語氣和風格
+        - 保留專業術語和關鍵概念
+        - 確保修改後的內容符合原意
+        - 只提供文本的更正版本，避免包括解釋。
+        - 不必翻譯文章內所有的人名、地名、城市名、政黨名、地區名、大學名、河流名，
+        請遵循這些規則，並按以下JSON格式返回優化結果： {{"improved_text": "優化後的文本內容"}}
+        """
+        )
+        
+        # Extract the response text
+        translation_text = response['response'].strip()
+        translation_text = remove_think_tag(translation_text)
+        # Parse the JSON response
+        try:
+            translation_json = json.loads(extraer_contenido_json(translation_text))
+            
+            # New validation logic
+            translation_result = translation_json.get("improved_text", translation_text)
+            
+            return translation_result
+        except json.JSONDecodeError  as e:
+            # Imprime el mensaje de error de la excepción
+            print(f"Ocurrió un error al decodificar el JSON: {e}")
+            # If JSON parsing fails, wrap the raw translation in JSON format
+            return translation_result
+            
+    except Exception as e:
+        print("sssss"+ str(e))
+        return translation_result
 
 def translate_text_ollama(
     text: str,
@@ -516,7 +581,7 @@ cost_tokens = 0
 def translate_text(text):
     if (text ==  ""):
         return text
-    source_lang = "英文"
+    source_lang = "西班牙文"
     target_lang = "台灣繁體中文"
     result = translate_text_ollama(
         text,
@@ -526,11 +591,12 @@ def translate_text(text):
     )
     if(result["success"] == True):
         source = result["translation"]
-        result = complet_text_ollama( source, target_lang, "phi4:latest" )
-        if(result["success"] == True):
-            return result["translation"]
-        else: 
-            return source
+        # result = complet_text_ollama( source, target_lang, "phi4:latest" )
+        # if(result["success"] == True):
+        #     return result["translation"]
+        # else: 
+        #     
+        return source
     else: 
         return ""
 
@@ -652,19 +718,25 @@ if filename.endswith('.epub'):
 
             # 遍历短文本列表，依次翻译每个短文本
             for short_text in tqdm(short_text_list):
-                print(return_text(short_text))
+                #print(return_text(short_text))
                 count += 1
                 # 翻译当前短文本
-                translated_short_text = translate_and_store(short_text)
+                translated_short_text = translate_and_store(return_text(short_text))
                 short_text = return_text(short_text)
-                translated_short_text = concatenar_parrafos(return_text(translated_short_text))
+                translated_short_text = complet_text_ollama_simple(concatenar_parrafos(return_text(translated_short_text)) )
+                # Imprimir short_text en azul
+                print("\033[34m" + short_text + "\033[0m")
+
+                # Imprimir translated_short_text en verde
+                print("\033[32m" + translated_short_text + "\033[0m")
+
                 # 将当前短文本和翻译后的文本加入总文本中
                 if bilingual_output.lower() == 'true':
-                    translated_text += f"{short_text}<br>\n{translated_short_text}<br>\n"
+                    translated_text += f"{short_text}<br>\n<span style='color: blue;'>{translated_short_text}</span><br>\n"
                 else:
-                    translated_text += f"{translated_short_text}<br>\n"
+                    translated_text += f"<span style='color: blue;'>{translated_short_text}</span><br>\n"
+
                 # print(short_text)
-                print(translated_short_text)
             # 使用翻译后的文本替换原有的章节内容
             item.set_content((img_html + translated_text.replace('\n', '<br>')).encode('utf-8'))
             translated_all += translated_text
