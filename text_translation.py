@@ -33,6 +33,12 @@ from docx import Document
 import mobi
 import pandas as pd
 
+def remove_think_tag(text):
+    # Usa una expresión regular para eliminar el contenido entre las etiquetas <think>...</think>
+    cleaned_text = re.sub(r'<think>.*?</think>', '', text, flags=re.DOTALL)
+    return cleaned_text.strip()
+
+
 def concatenar_parrafos(texto):
     # Dividir el texto en párrafos utilizando el salto de línea como delimitador
     párrafos = texto.strip().split('\n')
@@ -64,9 +70,10 @@ def complet_text_ollama(
     # 请从编辑以下文本开始: {text}
     # """
     prompt = f"""
-        開始優化文本
-        ------
+        開始優化本文
+        ```
         {text}
+        ```
     """
     try:
         # Generate translation using Ollama
@@ -75,30 +82,26 @@ def complet_text_ollama(
             prompt=prompt,
             system="""
         作為資深{target_lang}寫作優化專家，你需要：
-        1. 提升文本質量：
+        - 維持原來語言：{target_lang}
         - 糾正所有錯別字和標點符號
         - 優化語法結構和句式
         - 確保用詞準確和地道
         - 提高表達的連貫性和流暢度
-        - 只提供文本的更正版本，避免包括解釋。
-        2. 改善可讀性：
         - 將冗長句子分解成簡短、清晰的表達
         - 消除重覆和冗余內容
         - 優化段落結構和層次
         - 增強文本的邏輯性
-        - 只提供文本的更正版本，避免包括解釋。
-        3. 保持風格：
         - 維持原文的語氣和風格
         - 保留專業術語和關鍵概念
         - 確保修改後的內容符合原意
         - 只提供文本的更正版本，避免包括解釋。
-        請遵循這些規則，並按以下JSON格式返回優化結果，： {{"improved_text": "優化後的文本內容"}}
+        請遵循這些規則，並按以下JSON格式返回優化結果： {{"improved_text": "優化後的文本內容"}}
         """
         )
         
         # Extract the response text
         translation_text = response['response'].strip()
-        
+        translation_text = remove_think_tag(translation_text)
         # Parse the JSON response
         try:
             translation_json = json.loads(extraer_contenido_json(translation_text))
@@ -106,22 +109,14 @@ def complet_text_ollama(
             # New validation logic
             translation_result = translation_json.get("improved_text", translation_text)
             
-            # Check if translation_result is itself a JSON string
-            if isinstance(translation_result, str):
-                try:
-                    nested_json = json.loads(translation_result)
-                    if isinstance(nested_json, dict) and "improved_text" in nested_json:
-                        translation_result = nested_json["improved_text"]
-                except json.JSONDecodeError:
-                    # If it's not valid JSON, keep the string as is
-                    pass
-            
             return {
                 "success": True,
                 "source_text": text,
                 "translation": translation_result
             }
-        except json.JSONDecodeError:
+        except json.JSONDecodeError  as e:
+            # Imprime el mensaje de error de la excepción
+            print(f"Ocurrió un error al decodificar el JSON: {e}")
             # If JSON parsing fails, wrap the raw translation in JSON format
             return {
                 "success": True,
@@ -145,20 +140,12 @@ def translate_text_ollama(
     model: str = "phi4:latest"
 ) -> Dict:
    
-    # Construct the prompt
-    if source_language:
-        prompt = f"""
+    prompt = f"""
         請開始翻譯以下的段落: 
-        ---------
+        ```
         {text}
-        """
-    else:
-        prompt = f"""
-        Translate the following text to {target_language}.
-        Return only the translated text in valid JSON format like this example:
-        {{"translation": "translated text here"}}
-        Text to translate: {text}
-        """
+        ```
+    """
     
     try:
         # Generate translation using Ollama
@@ -166,7 +153,7 @@ def translate_text_ollama(
             model=model,
             prompt=prompt,
             system="""
-             你是一位精通{source_language}與{target_language}。請把我給你段落{source_language}寫成的段落翻譯為{target_language}。
+             你是一位精通{source_language}與{target_language}的翻譯專家。請把我給你段落{source_language}寫成的段落翻譯為{target_language}。
              翻譯的原則如下：
                 - 譯文必須是用溫暖而富含人文關懷的筆觸，結合流暢自然的語言風格。
                 - 翻譯時，請注重使用多樣化的句式結構，巧妙融入{target_language}日常俚語與成語俗語，使翻譯既正式又不失親切感。
@@ -175,29 +162,20 @@ def translate_text_ollama(
                 - 力求讓每個翻譯都像是與讀者進行的一場真誠對話。
                 - 不必翻譯文章內所有的人名、地名、城市名、政黨名、地區名、大學名、河流名，
                 - 翻譯完後，讓譯文進行語法的修飾，儘量讓譯文讀起來通順，並充滿智者的口氣，並用最適合原文的字句來表達。
-                 翻譯完後，僅傳回有效 JSON 格式的翻譯文字，但不要使用程式碼格式，就像這個範例一樣： {{"translation": "translated text here"}}
+                - 翻譯完後，僅傳回如下有效 JSON 格式： {{"translation": "translated text here"}}
             """
         )
         
         # Extract the response text
         translation_text = response['response'].strip()
+        translation_text = remove_think_tag(translation_text)
         
         # Parse the JSON response
         try:
-            translation_json = json.loads(translation_text)
+            translation_json = json.loads(extraer_contenido_json(translation_text))
             
             # New validation logic
             translation_result = translation_json.get("translation", translation_text)
-            
-            # Check if translation_result is itself a JSON string
-            if isinstance(translation_result, str):
-                try:
-                    nested_json = json.loads(translation_result)
-                    if isinstance(nested_json, dict) and "translation" in nested_json:
-                        translation_result = nested_json["translation"]
-                except json.JSONDecodeError:
-                    # If it's not valid JSON, keep the string as is
-                    pass
             
             return {
                 "success": True,
