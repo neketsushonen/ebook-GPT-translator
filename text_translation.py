@@ -35,8 +35,8 @@ import mobi
 import pandas as pd
 
 openai_client = OpenAI(
-    #api_key=os.getenv("OPENAI_API_KEY"),
-    api_key="sk-JzkGqfheJ6TJacmtSGBlZrh4LxuWa51MX2p2WzGZfhOd7cHy",
+    api_key=os.getenv("OPENAI_API_KEY"),
+    #api_key="sk-JzkGqfheJ6TJacmtSGBlZrh4LxuWa51MX2p2WzGZfhOd7cHy",
     base_url="https://api.fe8.cn/v1",
 )
 
@@ -115,7 +115,7 @@ def concatenar_parrafos(texto):
 def complet_text_ollama(
     text: str,
     target_lang: str,
-    model: str = "gemma3:12b",
+    model: str = "deepseek-r1:14b",
     use_openai_api: bool = False,
     openai_model: str = "gpt-3.5-turbo"
 ) -> Dict:
@@ -144,7 +144,8 @@ def complet_text_ollama(
         response = ollama.generate(
             model=model,
             prompt=prompt,
-            system=system_message
+            system=system_message,
+            think=False
         )
         return response['response'].strip()
     
@@ -164,9 +165,7 @@ def complet_text_ollama(
         # Intentar usar OpenAI API si está habilitado
         if use_openai_api:
             try:
-                print("Intentando usar OpenAI API...")
                 translation_text = try_openai_api()
-                print("✓ OpenAI API utilizada exitosamente")
             except Exception as openai_error:
                 print(f"✗ Error con OpenAI API: {openai_error}")
                 print("→ Fallback a Ollama local...")
@@ -200,7 +199,7 @@ def complet_text_ollama(
 def complet_text_ollama_simple(
     text: str,
     target_lang: str = "台灣繁體中文",
-    model: str = "gemma3:12b",
+    model: str = "deepseek-r1:14b",
     use_openai_api: bool = False,
     openai_model: str = "gpt-3.5-turbo"
 ) -> str:
@@ -226,7 +225,8 @@ def complet_text_ollama_simple(
         response = ollama.generate(
             model=model,
             prompt=prompt,
-            system=system_message
+            system=system_message,
+            think=False
         )
         return response['response'].strip()
     
@@ -246,9 +246,7 @@ def complet_text_ollama_simple(
         # Intentar usar OpenAI API si está habilitado
         if use_openai_api:
             try:
-                print("Intentando usar OpenAI API...")
                 translation_text = try_openai_api()
-                print("✓ OpenAI API utilizada exitosamente")
             except Exception as openai_error:
                 print(f"✗ Error con OpenAI API: {openai_error}")
                 print("→ Fallback a Ollama local...")
@@ -272,7 +270,7 @@ def translate_text_ollama(
     text: str,
     target_language: str,
     source_language: Optional[str] = None,
-    model: str = "gemma3:12b",
+    model: str = "deepseek-r1:14b",
     use_openai_api: bool = False,
     openai_model: str = "gpt-3.5-turbo"
 ) -> Dict:
@@ -298,7 +296,8 @@ def translate_text_ollama(
         response = ollama.generate(
             model=model,
             prompt=prompt,
-            system=system_message
+            system=system_message,
+            think=False
         )
         return response['response'].strip()
     
@@ -318,9 +317,7 @@ def translate_text_ollama(
         # Intentar usar OpenAI API si está habilitado
         if use_openai_api:
             try:
-                print("Intentando usar OpenAI API...")
                 translation_text = try_openai_api()
-                print("✓ OpenAI API utilizada exitosamente")
             except Exception as openai_error:
                 print(f"✗ Error con OpenAI API: {openai_error}")
                 print("→ Fallback a Ollama local...")
@@ -595,8 +592,9 @@ def convert_pdf_to_text(pdf_filename, start_page=1, end_page=-1):
 def split_text_ollama(text):
 
     response = ollama.generate(
-        model='gemma3:12b',
+        model='deepseek-r1:14b',
         prompt=f"Divide el siguiente texto en párrafos, no es necesario agregar la anotacion ni explicacion ni enumeración: ```{text}```",
+        think=False
     )
         
         # Extract the response text
@@ -675,7 +673,7 @@ def translate_text(text):
         
         "繁體中文",
         "英文",
-        "gemma3:12b"
+        "deepseek-r1:14b"
     )
 
     
@@ -686,7 +684,7 @@ def translate_text(text):
             
             "智利西班牙文變體",
             "英文",
-            "gemma3:12b"
+            "deepseek-r1:14b"
         )
         if(result["success"] == True):
             source = source + "\n" + result["translation"]
