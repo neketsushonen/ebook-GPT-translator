@@ -6,6 +6,7 @@ import openai
 from tqdm import tqdm
 import ollama
 from typing import Dict, Optional
+from openai import OpenAI
 
 # import nltk
 # nltk.download('punkt')
@@ -33,10 +34,72 @@ from docx import Document
 import mobi
 import pandas as pd
 
-def remove_think_tag(text):
-    # Usa una expresión regular para eliminar el contenido entre las etiquetas <think>...</think>
-    cleaned_text = re.sub(r'<think>.*?</think>', '', text, flags=re.DOTALL)
-    return cleaned_text.strip()
+openai_client = OpenAI(
+    #api_key=os.getenv("OPENAI_API_KEY"),
+    api_key="sk-JzkGqfheJ6TJacmtSGBlZrh4LxuWa51MX2p2WzGZfhOd7cHy",
+    base_url="https://api.fe8.cn/v1",
+)
+
+def safe_json_parse(text: str, fallback_key: str = "improved_text") -> Dict:
+    """Parsear JSON de forma segura con fallback"""
+    if not text or text.strip() == "":
+        return {fallback_key: ""}
+    
+    try:
+        # Intentar parsear directamente
+        return json.loads(text)
+    except json.JSONDecodeError:
+        try:
+            # Intentar extraer y parsear JSON
+            json_content = extraer_contenido_json(text)
+            return json.loads(json_content)
+        except json.JSONDecodeError:
+            # Si todo falla, devolver el texto original
+            return {fallback_key: text.strip()}
+        
+def remove_think_tag(text: str) -> str:
+    """Remover etiquetas de pensamiento si existen"""
+    if not text:
+        return ""
+    
+    # Remover patrones como <think>...</think>
+    text = re.sub(r'<think>.*?</think>', '', text, flags=re.DOTALL)
+    # Remover otros patrones similares
+    text = re.sub(r'<thinking>.*?</thinking>', '', text, flags=re.DOTALL)
+    return text.strip()
+
+def extraer_contenido_json(text: str) -> str:
+    """Extraer contenido JSON de la respuesta"""
+    if not text:
+        return "{}"
+    
+    # Limpiar el texto
+    text = text.strip()
+    
+    # Buscar JSON entre llaves
+    json_match = re.search(r'\{.*\}', text, re.DOTALL)
+    if json_match:
+        json_content = json_match.group(0)
+        # Validar que sea JSON válido
+        try:
+            json.loads(json_content)
+            return json_content
+        except json.JSONDecodeError:
+            pass
+    
+    # Si no se encuentra JSON válido, intentar crear uno
+    # Buscar texto que parezca ser el contenido deseado
+    lines = text.split('\n')
+    content = ""
+    for line in lines:
+        line = line.strip()
+        if line and not line.startswith('{') and not line.startswith('}'):
+            content += line + " "
+    
+    if content.strip():
+        return json.dumps({"improved_text": content.strip()}, ensure_ascii=False)
+    
+    return "{}"
 
 
 def concatenar_parrafos(texto):
@@ -48,214 +111,239 @@ def concatenar_parrafos(texto):
     
     return texto_concatenado
 
-def extraer_contenido_json(texto):
-    # Usamos una expresión regular para encontrar el contenido entre las marcas ```json ... ```
-    patron = r'```json(.*?)```'
-    contenido = re.findall(patron, texto, re.DOTALL)  # re.DOTALL permite que el '.' coincida con saltos de línea
-    
-    # Si hay coincidencias, devolvemos el contenido como un solo string (sin lista)
-    return contenido[0] if contenido else ''
 
 def complet_text_ollama(
     text: str,
     target_lang: str,
-    model: str = "phi4:latest"
+    model: str = "gemma3:12b",
+    use_openai_api: bool = False,
+    openai_model: str = "gpt-3.5-turbo"
 ) -> Dict:
-   
-    # Construct the prompt
-    # prompt = f"""
-    # 作为一名中文写作改进助理，你的任务是改进所提供文本的拼写、语法、清晰、简洁和整体可读性，同时分解长句，减少重复，并提供改进建议。请只提供文本的更正版本，避免包括解释。
-    # 僅傳回有效 JSON 格式的調整文字，就像這個範例一樣：
-    # {{"translation": "translated text here"}}
-    # 请从编辑以下文本开始: {text}
-    # """
+    
     prompt = f"""
         開始優化本文
         ```
         {text}
         ```
     """
-    try:
-        # Generate translation using Ollama
+    
+    system_message = f"""
+    作為資深{target_lang}寫作優化專家，你需要：
+    - 維持原來語言：{target_lang}
+    - 糾正所有錯別字和標點符號
+    - 確保用詞準確和地道
+    - 將冗長句子分解成簡短、清晰的表達
+    - 確保修改後的內容符合原意
+    - 只提供文本的更正版本，避免包括解釋。
+    - 不必翻譯文章內所有的人名、地名、城市名、政黨名、地區名、大學名、河流名，
+    請遵循這些規則，並按以下JSON格式返回優化結果： {{"improved_text": "優化後的文本內容"}}
+    """
+    
+    def try_ollama_local():
+        """Función para usar Ollama local"""
         response = ollama.generate(
             model=model,
             prompt=prompt,
-            system="""
-        作為資深{target_lang}寫作優化專家，你需要：
-        - 維持原來語言：{target_lang}
-        - 糾正所有錯別字和標點符號
-        - 優化語法結構和句式
-        - 確保用詞準確和地道
-        - 提高表達的連貫性和流暢度
-        - 將冗長句子分解成簡短、清晰的表達
-        - 消除重覆和冗余內容
-        - 優化段落結構和層次
-        - 增強文本的邏輯性
-        - 維持原文的語氣和風格
-        - 保留專業術語和關鍵概念
-        - 確保修改後的內容符合原意
-        - 只提供文本的更正版本，避免包括解釋。
-        - 不必翻譯文章內所有的人名、地名、城市名、政黨名、地區名、大學名、河流名，
-        請遵循這些規則，並按以下JSON格式返回優化結果： {{"improved_text": "優化後的文本內容"}}
-        """
+            system=system_message
         )
+        return response['response'].strip()
+    
+    def try_openai_api():
+        """Función para usar OpenAI API"""
+        response = openai_client.chat.completions.create(
+            model=openai_model,
+            messages=[
+                {"role": "system", "content": system_message},
+                {"role": "user", "content": prompt}
+            ],
+            temperature=0.7
+        )
+        return response.choices[0].message.content.strip()
+    
+    try:
+        # Intentar usar OpenAI API si está habilitado
+        if use_openai_api:
+            try:
+                print("Intentando usar OpenAI API...")
+                translation_text = try_openai_api()
+                print("✓ OpenAI API utilizada exitosamente")
+            except Exception as openai_error:
+                print(f"✗ Error con OpenAI API: {openai_error}")
+                print("→ Fallback a Ollama local...")
+                translation_text = try_ollama_local()
+                print("✓ Ollama local utilizado como fallback")
+        else:
+            # Usar Ollama local directamente
+            translation_text = try_ollama_local()
         
-        # Extract the response text
-        translation_text = response['response'].strip()
         translation_text = remove_think_tag(translation_text)
-        # Parse the JSON response
-        try:
-            translation_json = json.loads(extraer_contenido_json(translation_text))
-            
-            # New validation logic
-            translation_result = translation_json.get("improved_text", translation_text)
-            
-            return {
-                "success": True,
-                "source_text": text,
-                "translation": translation_result
-            }
-        except json.JSONDecodeError  as e:
-            # Imprime el mensaje de error de la excepción
-            print(f"Ocurrió un error al decodificar el JSON: {e}")
-            # If JSON parsing fails, wrap the raw translation in JSON format
-            return {
-                "success": True,
-                "source_text": text,
-                "translation": translation_text
-            }
+        
+        # Parse the JSON response de forma segura
+        translation_json = safe_json_parse(translation_text, "improved_text")
+        translation_result = translation_json.get("improved_text", translation_text)
+        
+        return {
+            "success": True,
+            "source_text": text,
+            "translation": translation_result,
+            "used_api": "openai" if use_openai_api else "ollama"
+        }
             
     except Exception as e:
-        print("sssss"+ str(e))
+        print(f"Error general: {str(e)}")
         return {
             "success": False,
             "error": str(e),
             "source_text": text,
-        }   
+        }
 
 def complet_text_ollama_simple(
     text: str,
-    target_lang: str  = "台灣繁體中文",
-    model: str = "phi4:latest"
-) -> Dict:
-   
-    # Construct the prompt
-    # prompt = f"""
-    # 作为一名中文写作改进助理，你的任务是改进所提供文本的拼写、语法、清晰、简洁和整体可读性，同时分解长句，减少重复，并提供改进建议。请只提供文本的更正版本，避免包括解释。
-    # 僅傳回有效 JSON 格式的調整文字，就像這個範例一樣：
-    # {{"translation": "translated text here"}}
-    # 请从编辑以下文本开始: {text}
-    # """
+    target_lang: str = "台灣繁體中文",
+    model: str = "gemma3:12b",
+    use_openai_api: bool = False,
+    openai_model: str = "gpt-3.5-turbo"
+) -> str:
+    
     prompt = f"""
         開始優化本文
         ```
         {text}
         ```
     """
-    try:
-        # Generate translation using Ollama
+    
+    system_message = f"""
+    作為資深{target_lang}修改錯別字專家，你需要：
+    - 翻譯成{target_lang}
+    - 糾正所有錯別字和標點符號
+    - 只提供文本的更正版本，避免包括解釋。
+    - 不必翻譯文章內所有的人名、地名、城市名、政黨名、地區名、大學名、河流名，
+    請遵循這些規則，並按以下JSON格式返回優化結果： {{"improved_text": "修改後的文本內容"}}
+    """
+    
+    def try_ollama_local():
+        """Función para usar Ollama local"""
         response = ollama.generate(
             model=model,
             prompt=prompt,
-            system="""
-        作為資深{target_lang}寫作優化專家，你需要：
-        - 維持原來語言：{target_lang}
-        - 糾正所有錯別字和標點符號
-        - 優化語法結構和句式
-        - 確保用詞準確和地道
-        - 提高表達的連貫性和流暢度
-        - 將冗長句子分解成簡短、清晰的表達
-        - 消除重覆和冗余內容
-        - 優化段落結構和層次
-        - 增強文本的邏輯性
-        - 保留專業術語和關鍵概念
-        - 確保修改後的內容符合原意
-        - 只提供文本的更正版本，避免包括解釋。
-        - 不必翻譯文章內所有的人名、地名、城市名、政黨名、地區名、大學名、河流名，
-        請遵循這些規則，並按以下JSON格式返回優化結果： {{"improved_text": "優化後的文本內容"}}
-        """
+            system=system_message
         )
+        return response['response'].strip()
+    
+    def try_openai_api():
+        """Función para usar OpenAI API"""
+        response = openai_client.chat.completions.create(
+            model=openai_model,
+            messages=[
+                {"role": "system", "content": system_message},
+                {"role": "user", "content": prompt}
+            ],
+            temperature=0.7
+        )
+        return response.choices[0].message.content.strip()
+    
+    try:
+        # Intentar usar OpenAI API si está habilitado
+        if use_openai_api:
+            try:
+                print("Intentando usar OpenAI API...")
+                translation_text = try_openai_api()
+                print("✓ OpenAI API utilizada exitosamente")
+            except Exception as openai_error:
+                print(f"✗ Error con OpenAI API: {openai_error}")
+                print("→ Fallback a Ollama local...")
+                translation_text = try_ollama_local()
+                print("✓ Ollama local utilizado como fallback")
+        else:
+            # Usar Ollama local directamente
+            translation_text = try_ollama_local()
         
-        # Extract the response text
-        translation_text = response['response'].strip()
         translation_text = remove_think_tag(translation_text)
-        # Parse the JSON response
-        try:
-            translation_json = json.loads(extraer_contenido_json(translation_text))
-            
-            # New validation logic
-            translation_result = translation_json.get("improved_text", translation_text)
-            
-            return translation_result
-        except json.JSONDecodeError  as e:
-            # Imprime el mensaje de error de la excepción
-            print(f"Ocurrió un error al decodificar el JSON: {e}")
-            # If JSON parsing fails, wrap the raw translation in JSON format
-            return translation_result
+        
+        # Parse the JSON response de forma segura
+        translation_json = safe_json_parse(translation_text, "improved_text")
+        return translation_json.get("improved_text", translation_text)
             
     except Exception as e:
-        print("sssss"+ str(e))
-        return translation_result
+        print(f"Error general: {str(e)}")
+        return text   # Retornar el texto original en caso de error
 
 def translate_text_ollama(
     text: str,
     target_language: str,
     source_language: Optional[str] = None,
-    model: str = "phi4:latest"
+    model: str = "gemma3:12b",
+    use_openai_api: bool = False,
+    openai_model: str = "gpt-3.5-turbo"
 ) -> Dict:
-   
+    
     prompt = f"""
-        請開始翻譯以下的段落: 
+        請將以下的段落翻譯成{target_language}
         ```
         {text}
         ```
     """
     
-    try:
-        # Generate translation using Ollama
+    system_message = f"""
+    你是一位精通{source_language}與{target_language}的翻譯專家。請把我給你段落{source_language}寫成的段落翻譯為{target_language}。
+    翻譯的原則如下：
+        - 注意翻譯段落之間的邏輯過渡要自然，翻譯語言應符合目標讀者群體的習慣與期待，避免生硬的術語堆砌或機械式的重覆。
+        - 力求讓每個翻譯都像是與讀者進行的一場真誠對話。
+        - 不必翻譯文章內所有的人名、地名、城市名、政黨名、地區名、大學名、河流名，
+        - 翻譯完後，僅傳回如下有效 JSON 格式： {{"translation": "translated text here"}}
+    """
+    
+    def try_ollama_local():
+        """Función para usar Ollama local"""
         response = ollama.generate(
             model=model,
             prompt=prompt,
-            system="""
-             你是一位精通{source_language}與{target_language}的翻譯專家。請把我給你段落{source_language}寫成的段落翻譯為{target_language}。
-             翻譯的原則如下：
-                - 譯文必須是用溫暖而富含人文關懷的筆觸，結合流暢自然的語言風格。
-                - 翻譯時，請注重使用多樣化的句式結構，巧妙融入{target_language}日常俚語與成語俗語，使翻譯既正式又不失親切感。
-                - 注意翻譯段落之間的邏輯過渡要自然，翻譯語言應符合目標讀者群體的習慣與期待，避免生硬的術語堆砌或機械式的重覆。
-                - 力求讓每個翻譯都像是與讀者進行的一場真誠對話。
-                - 不必翻譯文章內所有的人名、地名、城市名、政黨名、地區名、大學名、河流名，
-                - 翻譯完後，讓譯文進行語法的修飾，儘量讓譯文讀起來通順，並充滿愛心的口氣，並用最適合原文的字句來表達。
-                - 翻譯完後，僅傳回如下有效 JSON 格式： {{"translation": "translated text here"}}
-            """
+            system=system_message
         )
+        return response['response'].strip()
+    
+    def try_openai_api():
+        """Función para usar OpenAI API"""
+        response = openai_client.chat.completions.create(
+            model=openai_model,
+            messages=[
+                {"role": "system", "content": system_message},
+                {"role": "user", "content": prompt}
+            ],
+            temperature=0.7
+        )
+        return response.choices[0].message.content.strip()
+    
+    try:
+        # Intentar usar OpenAI API si está habilitado
+        if use_openai_api:
+            try:
+                print("Intentando usar OpenAI API...")
+                translation_text = try_openai_api()
+                print("✓ OpenAI API utilizada exitosamente")
+            except Exception as openai_error:
+                print(f"✗ Error con OpenAI API: {openai_error}")
+                print("→ Fallback a Ollama local...")
+                translation_text = try_ollama_local()
+                print("✓ Ollama local utilizado como fallback")
+        else:
+            # Usar Ollama local directamente
+            translation_text = try_ollama_local()
         
-        # Extract the response text
-        translation_text = response['response'].strip()
         translation_text = remove_think_tag(translation_text)
         
-        # Parse the JSON response
-        try:
-            translation_json = json.loads(extraer_contenido_json(translation_text))
-            
-            # New validation logic
-            translation_result = translation_json.get("translation", translation_text)
-            
-            return {
-                "success": True,
-                "source_text": text,
-                "target_language": target_language,
-                "source_language": source_language,
-                "translation": translation_result
-            }
-        except json.JSONDecodeError:
-            # If JSON parsing fails, wrap the raw translation in JSON format
-            return {
-                "success": True,
-                "source_text": text,
-                "target_language": target_language,
-                "source_language": source_language,
-                "translation": translation_text
-            }
+        # Parse the JSON response de forma segura
+        translation_json = safe_json_parse(translation_text, "translation")
+        translation_result = translation_json.get("translation", translation_text)
+        
+        return {
+            "success": True,
+            "source_text": text,
+            "target_language": target_language,
+            "source_language": source_language,
+            "translation": translation_result,
+            "used_api": "openai" if use_openai_api else "ollama"
+        }
             
     except Exception as e:
         return {
@@ -264,7 +352,7 @@ def translate_text_ollama(
             "source_text": text,
             "target_language": target_language,
             "source_language": source_language
-        }   
+        }
 
 def get_docx_title(docx_filename):
     with zipfile.ZipFile(docx_filename) as zf:
@@ -507,7 +595,7 @@ def convert_pdf_to_text(pdf_filename, start_page=1, end_page=-1):
 def split_text_ollama(text):
 
     response = ollama.generate(
-        model='phi4:latest',
+        model='gemma3:12b',
         prompt=f"Divide el siguiente texto en párrafos, no es necesario agregar la anotacion ni explicacion ni enumeración: ```{text}```",
     )
         
@@ -547,7 +635,7 @@ def split_text(text):
     # 遍历句子列表
     for s in sentence_list:
         # 如果当前短文本加上新的句子长度不大于1024，则将新的句子加入当前短文本
-        if len(short_text + s) <= 600:
+        if len(short_text + s) <= 100:
             short_text += s
         # 如果当前短文本加上新的句子长度大于1024，则将当前短文本加入短文本列表，并重置当前短文本为新的句子
         else:
@@ -564,6 +652,9 @@ def return_text(text):
     if isinstance(text, dict):
         # Si tiene la clave 'translation', se toma su valor
         text = text.get('translation', '')
+    if isinstance(text, list):
+        text = ''.join(text)
+        
     # Realiza los reemplazos como tenías definidos
     text = text.replace(". ", ".\n")
     text = text.replace("。", "。\n")
@@ -579,21 +670,26 @@ cost_tokens = 0
 def translate_text(text):
     if (text ==  ""):
         return text
-    source_lang = "英文"
-    target_lang = "台灣繁體中文"
     result = translate_text_ollama(
         text,
-        target_lang,
-        source_lang,
-        "phi4:latest"
+        
+        "繁體中文",
+        "英文",
+        "gemma3:12b"
     )
+
+    
     if(result["success"] == True):
         source = result["translation"]
-        # result = complet_text_ollama( source, target_lang, "phi4:latest" )
-        # if(result["success"] == True):
-        #     return result["translation"]
-        # else: 
-        #     
+        result = translate_text_ollama(
+            text,
+            
+            "智利西班牙文變體",
+            "英文",
+            "gemma3:12b"
+        )
+        if(result["success"] == True):
+            source = source + "\n" + result["translation"]
         return source
     else: 
         return ""
@@ -607,7 +703,7 @@ def translate_and_store(text):
     # 否则，调用 translate_text 函数进行翻译，并将结果存储在字典中
     translated_text = translate_text(text)
     #print("\033[37m" + translated_text + "\033[0m")
-    translated_text = complet_text_ollama_simple(concatenar_parrafos(return_text(translated_text)) )
+    #translated_text = complet_text_ollama_simple(concatenar_parrafos(return_text(translated_text)) )
     translated_dict[text] = translated_text
 
     # 将字典保存为 JSON 文件
@@ -796,7 +892,7 @@ cost = cost_tokens / 1000 * 0.002
 print(f"Translation completed. Total cost: {cost_tokens} tokens, ${cost}.")
 
 try:
-    os.remove(jsonfile)
+    #os.remove(jsonfile)
     print(f"File '{jsonfile}' has been deleted.")
 except FileNotFoundError:
     print(f"File '{jsonfile}' not found. No file was deleted.")
