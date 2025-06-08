@@ -5,7 +5,7 @@ import re
 import openai
 from tqdm import tqdm
 import ollama
-from typing import Dict, Optional
+from typing import Dict, Optional, List, Tuple
 from openai import OpenAI
 
 # import nltk
@@ -115,7 +115,7 @@ def concatenar_parrafos(texto):
 def complet_text_ollama(
     text: str,
     target_lang: str,
-    model: str = "deepseek-r1:14b",
+    model: str = "qwen3:14b",
     use_openai_api: bool = False,
     openai_model: str = "gpt-3.5-turbo"
 ) -> Dict:
@@ -199,7 +199,7 @@ def complet_text_ollama(
 def complet_text_ollama_simple(
     text: str,
     target_lang: str = "台灣繁體中文",
-    model: str = "deepseek-r1:14b",
+    model: str = "qwen3:14b",
     use_openai_api: bool = False,
     openai_model: str = "gpt-3.5-turbo"
 ) -> str:
@@ -270,7 +270,7 @@ def translate_text_ollama(
     text: str,
     target_language: str,
     source_language: Optional[str] = None,
-    model: str = "deepseek-r1:14b",
+    model: str = "qwen3:14b",
     use_openai_api: bool = False,
     openai_model: str = "gpt-3.5-turbo"
 ) -> Dict:
@@ -587,45 +587,75 @@ def convert_pdf_to_text(pdf_filename, start_page=1, end_page=-1):
         text = pdfminer.high_level.extract_text(pdf_filename, page_numbers=list(range(start_page - 1, end_page)))
     return text
 
-
-# 将文本分成不大于1024字符的短文本list
-def split_text_ollama(text):
-
-    response = ollama.generate(
-        model='deepseek-r1:14b',
-        prompt=f"Divide el siguiente texto en párrafos, no es necesario agregar la anotacion ni explicacion ni enumeración: ```{text}```",
-        think=False
-    )
-        
-        # Extract the response text
-    response = response['response'].strip()
-
+def split_text_into_sentences(text):
+    """
+    Fragmenta un texto en párrafos por saltos de línea y divide cada párrafo en sentencias.
+    Valida con ollama y, si una sentencia no es válida, usa ollama para dividirla en sentencias correctas.
     
-    # La respuesta del modelo se espera como una lista de frases separadas
-    sentence_list = response.split("\n")  # Asegúrate de procesar la respuesta según el formato devuelto
-
-    # Inicializa la lista para fragmentos cortos de texto
-    short_text_list = []
-    short_text = ""
-
-    # Agrupa las frases según el límite máximo de longitud
-    for s in sentence_list:
-        if len(short_text + s) <= 200:
-            short_text += s
-        else:
-            short_text_list.append(short_text)
-            short_text = s
-
-    # Agrega el último fragmento
-    if short_text:
-        short_text_list.append(short_text)
-
-    return short_text_list
+    Args:
+        text (str): Texto de entrada a fragmentar.
+    
+    Returns:
+        list: Lista de sentencias válidas.
+    """
+    paragraphs = text.split('\n')
+    sentences = []
+    
+    sentence_pattern = r'.+?[。！？!?.]'
+    
+    for paragraph in paragraphs:
+        if not paragraph.strip():
+            continue
+        # Intentar dividir el párrafo en sentencias con la expresión regular
+        paragraph_sentences = re.findall(sentence_pattern, paragraph.strip())
+        
+        for sentence in paragraph_sentences:
+            try:
+                # Validar la sentencia con ollama
+                response = ollama.generate(
+                    model='qwen3:14b',
+                    prompt=f"¿Es esta una sentencia válida en un texto narrativo? Responde solo 'Sí' o 'No':\n{sentence}",
+                    think=False
+                )
+                if response['response'].strip() == 'Sí':
+                    print(f"✓ Sentencia válida: {sentence.strip()}")
+                    sentences.append(sentence.strip())
+                else:
+                    # Si no es válida, usar ollama para dividir el párrafo en sentencias correctas
+                    try:
+                        split_response = ollama.generate(
+                            model='qwen3:14b',
+                            prompt=f"Divide el siguiente texto en sentencias narrativas válidas, separadas por '|':\n{sentence}",
+                            think=False
+                        )
+                        # Procesar la respuesta de ollama (espera formato: sentencia1|sentencia2|...)
+                        new_sentences = split_response['response'].strip().split('|')
+                        # Validar cada nueva sentencia
+                        for new_sentence in new_sentences:
+                            if new_sentence.strip():
+                                valid_response = ollama.generate(
+                                    model='qwen3:14b',
+                                    prompt=f"¿Es esta una sentencia válida en un texto narrativo? Responde solo 'Sí' o 'No':\n{new_sentence}",
+                                    think=False
+                                )
+                                if valid_response['response'].strip() == 'Sí':
+                                    print(f"✓ Nueva sentencia válida: {new_sentence.strip()}") 
+                                    sentences.append(new_sentence.strip())
+                    except Exception as e:
+                        print(f"Error al dividir con ollama: {e}")
+                        print(f"✓ Sentencia original incluida por fallo: {sentence.strip()}")
+                        sentences.append(sentence.strip())  # Incluir la original si falla
+            except Exception as e:
+                print(f"Error al validar con ollama: {e}")
+                print(f"✓ Sentencia original incluida por fallo: {sentence.strip()}")
+                sentences.append(sentence.strip())  # Incluir la original si falla
+    
+    return sentences
 
 def split_text(text):
     
     sentence_list = re.findall(r'.+?[。！？!?.]', text)
-
+    #sentence_list = split_text_into_sentences(text)
     # 初始化短文本列表
     short_text_list = []
     # 初始化当前短文本
@@ -633,7 +663,7 @@ def split_text(text):
     # 遍历句子列表
     for s in sentence_list:
         # 如果当前短文本加上新的句子长度不大于1024，则将新的句子加入当前短文本
-        if len(short_text + s) <= 100:
+        if len(short_text + s) <= 10:
             short_text += s
         # 如果当前短文本加上新的句子长度大于1024，则将当前短文本加入短文本列表，并重置当前短文本为新的句子
         else:
@@ -672,22 +702,22 @@ def translate_text(text):
         text,
         
         "繁體中文",
-        "英文",
-        "deepseek-r1:14b"
+        "西班牙文",
+        "qwen3:14b"
     )
 
     
     if(result["success"] == True):
         source = result["translation"]
-        result = translate_text_ollama(
-            text,
+        # result = translate_text_ollama(
+        #     text,
             
-            "智利西班牙文變體",
-            "英文",
-            "deepseek-r1:14b"
-        )
-        if(result["success"] == True):
-            source = source + "\n" + result["translation"]
+        #     "智利西班牙文變體",
+        #     "英文",
+        #     "qwen3:14b"
+        # )
+        # if(result["success"] == True):
+        #     source = source + "\n" + result["translation"]
         return source
     else: 
         return ""
