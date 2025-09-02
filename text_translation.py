@@ -826,8 +826,8 @@ if filename.endswith('.epub'):
 
             # 将多个空格替换为一个空格
             import re
-
             #text = re.sub(r"\s+", " ", text)
+            text = re.sub(r"[ ]{2,}", " ", text)
 
             # 如果设置了译名表替换，则对文本进行翻译前的替换
             if args.tlist:
