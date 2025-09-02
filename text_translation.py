@@ -654,7 +654,8 @@ def split_text_into_sentences(text):
 
 def split_text(text):
     
-    sentence_list = re.findall(r'.+?[。！？!?.]', text)
+    #sentence_list = re.findall(r'.+?[。！？!?.]', text)
+    sentence_list = [s.strip() for s in text.split('\n') if s.strip()]
     #sentence_list = split_text_into_sentences(text)
     # 初始化短文本列表
     short_text_list = []
@@ -702,7 +703,7 @@ def translate_text(text):
         text,
         
         "繁體中文",
-        "西班牙文",
+        "英文",
         "qwen3:14b"
     )
 
@@ -712,7 +713,7 @@ def translate_text(text):
         # result = translate_text_ollama(
         #     text,
             
-        #     "智利西班牙文變體",
+        #     "智利英文變體",
         #     "英文",
         #     "qwen3:14b"
         # )
@@ -821,12 +822,12 @@ if filename.endswith('.epub'):
             if not text:
                 continue
             # 将所有回车替换为空格
-            text = text.replace("\n", " ")
+            #text = text.replace("\n", " ")
 
             # 将多个空格替换为一个空格
             import re
 
-            text = re.sub(r"\s+", " ", text)
+            #text = re.sub(r"\s+", " ", text)
 
             # 如果设置了译名表替换，则对文本进行翻译前的替换
             if args.tlist:
