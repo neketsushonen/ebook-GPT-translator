@@ -663,13 +663,7 @@ def split_text(text):
     short_text = ""
     # 遍历句子列表
     for s in sentence_list:
-        # 如果当前短文本加上新的句子长度不大于1024，则将新的句子加入当前短文本
-        if len(short_text + s) <= 10:
-            short_text += s
-        # 如果当前短文本加上新的句子长度大于1024，则将当前短文本加入短文本列表，并重置当前短文本为新的句子
-        else:
-            short_text_list.append(short_text)
-            short_text = s
+        short_text_list.append(s)
     # 将最后的短文本加入短文本列表
     short_text_list.append(short_text)
     return short_text_list
