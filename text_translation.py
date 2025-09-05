@@ -283,11 +283,11 @@ def translate_text_ollama(
     """
     
     system_message = f"""
-    你是一位精通{source_language}與{target_language}的翻譯專家。請把我給你段落{source_language}寫成的段落翻譯為{target_language}。
+    你是一位精通{source_language}與{target_language}的翻譯專家。請把我給你用{source_language}寫成的段落翻譯為{target_language}。
     翻譯的原則如下：
         - 注意翻譯段落之間的邏輯過渡要自然，翻譯語言應符合目標讀者群體的習慣與期待，避免生硬的術語堆砌或機械式的重覆。
-        - 力求讓每個翻譯都像是與讀者進行的一場真誠對話。
-        - 不必翻譯文章內所有的人名、地名、城市名、政黨名、地區名、大學名、河流名，
+        - 儘量把每一個字都翻譯出來，不要遺漏。
+        - 不必翻譯文章內所有的人名、地名、城市名、政黨名、地區名、大學名、河流名。
         - 翻譯完後，僅傳回如下有效 JSON 格式： {{"translation": "translated text here"}}
     """
     
@@ -601,7 +601,7 @@ def split_text_into_sentences(text):
             
         response = ollama.generate(
             model='qwen3:14b',
-            prompt=f"Divide este texto en sentencias válidas separadas por '|' sin modificar el contenido original:\n{paragraph}",
+            prompt=f"Divide este texto en sentencias válidas según el sentido y luego separarlas por '|' sin modificar el contenido original:\n{paragraph}",
             think=False
         )
         
