@@ -587,68 +587,28 @@ def convert_pdf_to_text(pdf_filename, start_page=1, end_page=-1):
         text = pdfminer.high_level.extract_text(pdf_filename, page_numbers=list(range(start_page - 1, end_page)))
     return text
 
+import ollama
+
+import ollama
+
 def split_text_into_sentences(text):
-    """
-    Fragmenta un texto en párrafos por saltos de línea y divide cada párrafo en sentencias.
-    Valida con ollama y, si una sentencia no es válida, usa ollama para dividirla en sentencias correctas.
-    
-    Args:
-        text (str): Texto de entrada a fragmentar.
-    
-    Returns:
-        list: Lista de sentencias válidas.
-    """
     paragraphs = text.split('\n')
     sentences = []
-    
-    sentence_pattern = r'.+?[。！？!?.]'
     
     for paragraph in paragraphs:
         if not paragraph.strip():
             continue
-        # Intentar dividir el párrafo en sentencias con la expresión regular
-        paragraph_sentences = re.findall(sentence_pattern, paragraph.strip())
+            
+        response = ollama.generate(
+            model='qwen3:14b',
+            prompt=f"Divide este texto en sentencias válidas separadas por '|' sin modificar el contenido original:\n{paragraph}",
+            think=False
+        )
         
-        for sentence in paragraph_sentences:
-            try:
-                # Validar la sentencia con ollama
-                response = ollama.generate(
-                    model='qwen3:14b',
-                    prompt=f"¿Es esta una sentencia válida en un texto narrativo? Responde solo 'Sí' o 'No':\n{sentence}",
-                    think=False
-                )
-                if response['response'].strip() == 'Sí':
-                    print(f"✓ Sentencia válida: {sentence.strip()}")
-                    sentences.append(sentence.strip())
-                else:
-                    # Si no es válida, usar ollama para dividir el párrafo en sentencias correctas
-                    try:
-                        split_response = ollama.generate(
-                            model='qwen3:14b',
-                            prompt=f"Divide el siguiente texto en sentencias narrativas válidas, separadas por '|':\n{sentence}",
-                            think=False
-                        )
-                        # Procesar la respuesta de ollama (espera formato: sentencia1|sentencia2|...)
-                        new_sentences = split_response['response'].strip().split('|')
-                        # Validar cada nueva sentencia
-                        for new_sentence in new_sentences:
-                            if new_sentence.strip():
-                                valid_response = ollama.generate(
-                                    model='qwen3:14b',
-                                    prompt=f"¿Es esta una sentencia válida en un texto narrativo? Responde solo 'Sí' o 'No':\n{new_sentence}",
-                                    think=False
-                                )
-                                if valid_response['response'].strip() == 'Sí':
-                                    print(f"✓ Nueva sentencia válida: {new_sentence.strip()}") 
-                                    sentences.append(new_sentence.strip())
-                    except Exception as e:
-                        print(f"Error al dividir con ollama: {e}")
-                        print(f"✓ Sentencia original incluida por fallo: {sentence.strip()}")
-                        sentences.append(sentence.strip())  # Incluir la original si falla
-            except Exception as e:
-                print(f"Error al validar con ollama: {e}")
-                print(f"✓ Sentencia original incluida por fallo: {sentence.strip()}")
-                sentences.append(sentence.strip())  # Incluir la original si falla
+        split_sentences = response['response'].strip().split('|')
+        for sentence in split_sentences:
+            if sentence.strip():
+                sentences.append(sentence.strip())
     
     return sentences
 
@@ -695,11 +655,11 @@ def translate_text(text):
         return text
     result = translate_text_ollama(
         text,
-        
         "繁體中文",
-        "英文",
+        "西班牙文",
         "qwen3:14b"
     )
+
 
     
     if(result["success"] == True):
@@ -707,8 +667,8 @@ def translate_text(text):
         # result = translate_text_ollama(
         #     text,
             
-        #     "智利英文變體",
-        #     "英文",
+        #     "智利智利變體西班牙文變體",
+        #     "智利變體西班牙文",
         #     "qwen3:14b"
         # )
         # if(result["success"] == True):
@@ -836,31 +796,34 @@ if filename.endswith('.epub'):
             translated_text = ""
 
             # 遍历短文本列表，依次翻译每个短文本
-            for short_text in tqdm(short_text_list):
-                #print(return_text(short_text))
-                count += 1
-                # 翻译当前短文本
-                print("\033[34m" + short_text + "\033[0m")
-                translated_short_text = translate_and_store(return_text(short_text))
-                short_text = return_text(short_text)
-                # Imprimir short_text en azul
-                
+            for short_textOriginal in tqdm(short_text_list):
+                sentence_list = split_text_into_sentences(short_textOriginal)                            
+                for short_text in tqdm(sentence_list):
+                    #print(return_text(short_text))
+                    count += 1
+                    # 翻译当前短文本
+                    print("\033[34m" + short_text + "\033[0m")
+                    
+                    translated_short_text = translate_and_store(return_text(short_text))
+                    short_text = return_text(short_text)
+                    # Imprimir short_text en azul
+                    
 
-                # Imprimir translated_short_text en verde
-                print("\033[32m" + translated_short_text + "\033[0m")
+                    # Imprimir translated_short_text en verde
+                    print("\033[32m" + translated_short_text + "\033[0m")
 
-                # 将当前短文本和翻译后的文本加入总文本中
-                if bilingual_output.lower() == 'true':
-                    translated_text += f"{short_text}<br>\n<span style='color: blue;'>{translated_short_text}</span><br>\n"
-                else:
-                    translated_text += f"<span style='color: blue;'>{translated_short_text}</span><br>\n"
+                    # 将当前短文本和翻译后的文本加入总文本中
+                    if bilingual_output.lower() == 'true':
+                        translated_text += f"{short_text}<br>\n<span style='color: blue;'>{translated_short_text}</span><br>\n"
+                    else:
+                        translated_text += f"<span style='color: blue;'>{translated_short_text}</span><br>\n"
 
-                # print(short_text)
-            # 使用翻译后的文本替换原有的章节内容
-            item.set_content((img_html + translated_text.replace('\n', '<br>')).encode('utf-8'))
-            translated_all += translated_text
-            if args.test and count >= 3:
-                break
+                    # print(short_text)
+                # 使用翻译后的文本替换原有的章节内容
+                item.set_content((img_html + translated_text.replace('\n', '<br>')).encode('utf-8'))
+                translated_all += translated_text
+                if args.test and count >= 3:
+                    break
 
     # 将epub书籍写入文件
     epub.write_epub(new_filename, book, {})
