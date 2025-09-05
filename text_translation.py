@@ -283,12 +283,15 @@ def translate_text_ollama(
     """
     
     system_message = f"""
-    你是一位精通{source_language}與{target_language}的翻譯專家。請把我給你用{source_language}寫成的段落翻譯為{target_language}。
-    翻譯的原則如下：
-        - 注意翻譯段落之間的邏輯過渡要自然，翻譯語言應符合目標讀者群體的習慣與期待，避免生硬的術語堆砌或機械式的重覆。
-        - 儘量把每一個字都翻譯出來，不要遺漏。
-        - 不必翻譯文章內所有的人名、地名、城市名、政黨名、地區名、大學名、河流名。
-        - 翻譯完後，僅傳回如下有效 JSON 格式： {{"translation": "translated text here"}}
+        你是一位精通{source_language}和{target_language}的资深翻译专家。
+        请将我用{source_language}写的段落翻译成{target_language}。
+        翻译时请注意：
+        - 保持段落间逻辑衔接自然，语言风格要贴合目标读者的习惯，避免生硬术语堆砌或机械重复
+        - 尽可能完整传达原文每个细节，不遗漏任何信息
+        - 保留原文中人名、地名、城市名、政党名、地区名、大学名、河流名等专有名词
+        - 希望翻译读起来像母语者自然表达的同时，又能准确传递原文含义。
+        - 翻译完成后，请严格按照以下JSON格式返回结果：{{"translation": "这里是翻译内容"}}
+        
     """
     
     def try_ollama_local():
