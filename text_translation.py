@@ -1,4 +1,4 @@
-# -*- coding: utf-8 -*-
+# -*- coding: utf-8 -*- 
 
 import pdfminer.high_level
 import re
@@ -68,13 +68,16 @@ def remove_think_tag(text: str) -> str:
     text = re.sub(r'<thinking>.*?</thinking>', '', text, flags=re.DOTALL)
     return text.strip()
 
+# filepath: /Users/chunhaulai/Documents/workspace-personal/ebook-GPT-translator/text_translation.py
 def extraer_contenido_json(text: str) -> str:
-    """Extraer contenido JSON de la respuesta"""
+    """Extraer contenido JSON de la respuesta, eliminando delimitadores de bloque de código"""
     if not text:
         return "{}"
     
     # Limpiar el texto
     text = text.strip()
+    # Eliminar delimitadores de bloque de código como ```json ... ```
+    text = re.sub(r"^```json\s*|^```|\s*```$", "", text, flags=re.MULTILINE).strip()
     
     # Buscar JSON entre llaves
     json_match = re.search(r'\{.*\}', text, re.DOTALL)
@@ -88,7 +91,6 @@ def extraer_contenido_json(text: str) -> str:
             pass
     
     # Si no se encuentra JSON válido, intentar crear uno
-    # Buscar texto que parezca ser el contenido deseado
     lines = text.split('\n')
     content = ""
     for line in lines:
@@ -288,7 +290,7 @@ def translate_text_ollama(
         翻译时请注意：
         - 保持段落间逻辑衔接自然，语言风格要贴合目标读者的习惯，避免生硬术语堆砌或机械重复
         - 尽可能完整传达原文每个细节，不遗漏任何信息
-        - 保留原文中人名、地名、城市名、政党名、地区名、大学名、河流名等专有名词
+        - 保留原文中人名、地名、城市名、政党名、地区名、大学名、河流名等等的{source_language}专有名词
         - 希望翻译读起来像母语者自然表达的同时，又能准确传递原文含义。
         - 翻译完成后，请严格按照以下JSON格式返回结果：{{"translation": "这里是翻译内容"}}
         
@@ -380,7 +382,7 @@ def get_pdf_title(pdf_filename):
                 return document.info['Title']
             else:
                 text = pdfminer.high_level.extract_text(file)
-                match = re.search(r'(?<=\n)([^\n]+)(?=\n)', text)
+                match = re.search(r'(?<=\n)([^]+)(?=\n)', text)
                 if match:
                     return match.group(1)
                 else:
@@ -503,11 +505,19 @@ base_filename, file_extension = os.path.splitext(filename)
 new_filename = base_filename + "_translated.epub"
 new_filenametxt = base_filename + "_translated.txt"
 jsonfile = base_filename + "_process.json"
+sentences_json_file = base_filename + "_sentences.json"
 # 从文件中加载已经翻译的文本
 translated_dict = {}
 try:
     with open(jsonfile, "r", encoding="utf-8") as f:
         translated_dict = json.load(f)
+except FileNotFoundError:
+    pass
+# 从文件中加载已经分割的句子
+sentences_dict = {}
+try:
+    with open(sentences_json_file, "r", encoding="utf-8") as f:
+        sentences_dict = json.load(f)
 except FileNotFoundError:
     pass
 
@@ -595,6 +605,11 @@ import ollama
 import ollama
 
 def split_text_into_sentences(text):
+    # if True:
+    #     return [text]
+    if text in sentences_dict:
+        return sentences_dict[text]
+    
     paragraphs = text.split('\n')
     sentences = []
     
@@ -604,7 +619,9 @@ def split_text_into_sentences(text):
             
         response = ollama.generate(
             model='qwen3:14b',
-            prompt=f"Divide este texto en sentencias válidas según el sentido y luego separarlas por '|' sin modificar el contenido original:\n{paragraph}",
+            #prompt=f"Divide este texto en oraciones completas y válidas según su significado, y sepáralas con '|' sin modificar el contenido original.\n--------------------------\n{paragraph}",   
+            #prompt=f"Divide this text into valid complete sentences according to the meaning and then separate them by '|' without modifying the original content:\n{paragraph}",
+            prompt=f"請根據語意將以下段落劃分為有效且完整的小段落，並以「|」作為分隔符號，且不修改原始內容，也不必生成其他的解釋：\n--------------------------\n{paragraph}",
             think=False
         )
         
@@ -613,6 +630,10 @@ def split_text_into_sentences(text):
             if sentence.strip():
                 sentences.append(sentence.strip())
     
+    sentences_dict[text] = sentences
+    with open(sentences_json_file, "w", encoding="utf-8") as f:
+        json.dump(sentences_dict, f, ensure_ascii=False, indent=4)
+        
     return sentences
 
 def split_text(text):
@@ -658,8 +679,8 @@ def translate_text(text):
         return text
     result = translate_text_ollama(
         text,
+        "智利變體西班牙文",
         "繁體中文",
-        "西班牙文",
         "qwen3:14b"
     )
 
