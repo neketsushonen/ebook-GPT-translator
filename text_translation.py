@@ -5,6 +5,7 @@ import re
 import openai
 from tqdm import tqdm
 import ollama
+import time
 from typing import Dict, Optional, List, Tuple
 from openai import OpenAI
 
@@ -39,6 +40,12 @@ openai_client = OpenAI(
     #api_key="sk-JzkGqfheJ6TJacmtSGBlZrh4LxuWa51MX2p2WzGZfhOd7cHy",
     base_url="https://api.fe8.cn/v1",
 )
+
+def beep_forever():
+    while True:
+        print('\a')
+        os.system('afplay /System/Library/Sounds/Ping.aiff')
+        time.sleep(1)
 
 def safe_json_parse(text: str, fallback_key: str = "improved_text") -> Dict:
     """Parsear JSON de forma segura con fallback"""
@@ -117,7 +124,7 @@ def concatenar_parrafos(texto):
 def complet_text_ollama(
     text: str,
     target_lang: str,
-    model: str = "qwen3:14b",
+    model: str = "gpt-oss:120b-cloud",
     use_openai_api: bool = False,
     openai_model: str = "gpt-3.5-turbo"
 ) -> Dict:
@@ -192,6 +199,7 @@ def complet_text_ollama(
             
     except Exception as e:
         print(f"Error general: {str(e)}")
+        beep_forever()
         return {
             "success": False,
             "error": str(e),
@@ -200,8 +208,8 @@ def complet_text_ollama(
 
 def complet_text_ollama_simple(
     text: str,
-    target_lang: str = "台灣繁體中文",
-    model: str = "qwen3:14b",
+    target_lang: str = "智利西班牙文",
+    model: str = "gpt-oss:120b-cloud",
     use_openai_api: bool = False,
     openai_model: str = "gpt-3.5-turbo"
 ) -> str:
@@ -266,34 +274,51 @@ def complet_text_ollama_simple(
             
     except Exception as e:
         print(f"Error general: {str(e)}")
+        beep_forever()
         return text   # Retornar el texto original en caso de error
 
 def translate_text_ollama(
     text: str,
     target_language: str,
     source_language: Optional[str] = None,
-    model: str = "qwen3:14b",
+    model: str = "gpt-oss:120b-cloud",
     use_openai_api: bool = False,
     openai_model: str = "gpt-3.5-turbo"
 ) -> Dict:
     
     prompt = f"""
+        請將我提供的{source_language}段落翻譯成{target_language}。
+
+        【翻譯要求】
+        1. **僅輸出翻譯內容**：不要添加任何額外評論、解釋或分析
+        2. **翻譯原則**：
+        - 使用多樣化的句式結構，巧妙融入日常俚語與成語俗語
+        - 保持翻譯既正式又不失親切感
+        - 段落間的邏輯過渡要自然流暢
+        - 語言風格符合目標讀者群體的習慣與期待
+        - 避免生硬的術語堆砌或機械式重複
+        - 讓翻譯讀起來像是與讀者進行真誠對話
+
+        3. **專有名詞處理**：
+        - 保留原文中人名、地名、城市名、政黨名、地區名、大學名、河流名等{source_language}專有名稱
+        - 不翻譯專有名詞，直接使用原文形式
+
+        4. **輸出格式**：
+        - 嚴格按照以下JSON格式輸出：{{"translation": "翻譯內容"}}
+        - JSON必須使用雙引號
+        - **不要輸出JSON以外的任何文字**
+
+        【重要提醒】
+        - 你只需提供翻譯結果
+        - 不要分析原文
+        - 不要解釋翻譯決策
+        - 不要添加任何引言或結論
+        - 直接輸出符合格式的JSON即可
+
         請將以下的段落翻譯成{target_language}
         ```
         {text}
         ```
-    """
-    
-    system_message = f"""
-        你是一位精通{source_language}和{target_language}的资深翻译专家。
-        请将我用{source_language}写的段落翻译成{target_language}。
-        翻译时请注意：
-        - 保持段落间逻辑衔接自然，语言风格要贴合目标读者的习惯，避免生硬术语堆砌或机械重复
-        - 尽可能完整传达原文每个细节，不遗漏任何信息
-        - 保留原文中人名、地名、城市名、政党名、地区名、大学名、河流名等等的{source_language}专有名词
-        - 希望翻译读起来像母语者自然表达的同时，又能准确传递原文含义。
-        - 翻译完成后，请严格按照以下JSON格式返回结果：{{"translation": "这里是翻译内容"}}
-        
     """
     
     def try_ollama_local():
@@ -301,7 +326,6 @@ def translate_text_ollama(
         response = ollama.generate(
             model=model,
             prompt=prompt,
-            system=system_message,
             think=False
         )
         return response['response'].strip()
@@ -348,6 +372,7 @@ def translate_text_ollama(
         }
             
     except Exception as e:
+        beep_forever()
         return {
             "success": False,
             "error": str(e),
@@ -605,10 +630,12 @@ import ollama
 import ollama
 
 def split_text_into_sentences(text):
-    # if True:
-    #     return [text]
+    
     if text in sentences_dict:
         return sentences_dict[text]
+    
+    if True:
+        return [text]
     
     paragraphs = text.split('\n')
     sentences = []
@@ -617,13 +644,17 @@ def split_text_into_sentences(text):
         if not paragraph.strip():
             continue
             
-        response = ollama.generate(
-            model='qwen3:14b',
-            #prompt=f"Divide este texto en oraciones completas y válidas según su significado, y sepáralas con '|' sin modificar el contenido original.\n--------------------------\n{paragraph}",   
-            #prompt=f"Divide this text into valid complete sentences according to the meaning and then separate them by '|' without modifying the original content:\n{paragraph}",
-            prompt=f"請根據語意將以下段落劃分為有效且完整的小段落，並以「|」作為分隔符號，且不修改原始內容，也不必生成其他的解釋：\n--------------------------\n{paragraph}",
-            think=False
-        )
+        try:
+            response = ollama.generate(
+                model='gpt-oss:120b-cloud',
+                #prompt=f"Divide este texto en oraciones completas y válidas según su significado, y sepáralas con '|' sin modificar el contenido original.\n--------------------------\n{paragraph}",   
+                prompt=f"Divide this text into valid complete sentences and then separate them by '|' without modifying the original content:\n--------------------------\n{paragraph}",
+                #prompt=f"請根據語意將以下段落劃分為有效且完整的小段落，並以「|」作為分隔符號，且不修改原始內容，也不必生成其他的解釋：\n--------------------------\n{paragraph}",
+                think=False
+            )
+        except Exception as e:
+            print(f"Error in split_text_into_sentences: {e}")
+            beep_forever()
         
         split_sentences = response['response'].strip().split('|')
         for sentence in split_sentences:
@@ -679,9 +710,9 @@ def translate_text(text):
         return text
     result = translate_text_ollama(
         text,
-        "智利變體西班牙文",
         "繁體中文",
-        "qwen3:14b"
+        "英文",
+        "deepseek-v3.1:671b-cloud"
     )
 
 
@@ -693,7 +724,7 @@ def translate_text(text):
             
         #     "智利智利變體西班牙文變體",
         #     "智利變體西班牙文",
-        #     "qwen3:14b"
+        #     "gpt-oss:120b-cloud"
         # )
         # if(result["success"] == True):
         #     source = source + "\n" + result["translation"]
